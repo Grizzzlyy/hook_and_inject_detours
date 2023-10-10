@@ -23,7 +23,7 @@ Examles:
   Now, if you try to open file image.bmp in mspaint.exe, you get error, mspaint.exe can't open file.
 ![image](https://github.com/Grizzzlyy/hook_and_inject_detours/assets/96661760/e9535c80-8769-4b67-bf55-9c05d36a5b94)
 ![image](https://github.com/Grizzzlyy/hook_and_inject_detours/assets/96661760/825bbc52-abac-4375-a98e-ca0add08bc2d)
-2) Run notepad.exe. Assuming it has PID 4545. Execute [monitor.exe --pid 4545 --func FindFirstFile()].
+2) Run notepad.exe. Assuming it has PID 8104. Execute [monitor.exe --pid 8104 --func FindFirstFile].
    Now, if you try to open some file in notepad.exe, you'll see in monitor console calls and timestamps.
    
    ![image](https://github.com/Grizzzlyy/hook_and_inject_detours/assets/96661760/dfefd4d7-cfe1-46a0-893f-f6b4869399af)
