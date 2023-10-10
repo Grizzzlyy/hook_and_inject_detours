@@ -7,7 +7,7 @@ Hook and inject using Microsoft Detours library. Inject performed by CreateRemot
 /Monitor_and_inject directory contain files for building monitor.exe.
 
 Program can monitor calls to FindFirstFile(),  FindNextFile(), CreateFile(), CloseHandle() functions or hide files from these functions. Admin access is required. Recommend to use it on virtual machine.
-Monitor have console output. For debugging DLL, there are DBGPRINT() function. To see output from DBGPRINT(), you can use DebugView utility from Microsoft. To get PID of process, you can use Process Hacker utility. To view API calls of target application (for example, CreateFileW() from KERNEL32.DLL), you can use "API Monitor" utility.
+Monitor have console output. Monitor and dll communicates via sockets For debugging DLL, there are DBGPRINT() function. To see output from DBGPRINT(), you can use DebugView utility from Microsoft. To get PID of process, you can use Process Hacker utility. To view API calls of target application (for example, CreateFileW() from KERNEL32.DLL), you can use "API Monitor" utility.
 
 ### Usage:
 1) Create VS project with DLL template, put there files from /DLL directory. Build DLL for x64 systems.
