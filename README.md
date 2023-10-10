@@ -25,6 +25,7 @@ Examles:
 ![image](https://github.com/Grizzzlyy/hook_and_inject_detours/assets/96661760/825bbc52-abac-4375-a98e-ca0add08bc2d)
 2) Run notepad.exe. Assuming it has PID 4545. Execute [monitor.exe --pid 4545 --func FindFirstFile()].
    Now, if you try to open some file in notepad.exe, you'll see in monitor console calls and timestamps.
+   
    ![image](https://github.com/Grizzzlyy/hook_and_inject_detours/assets/96661760/dfefd4d7-cfe1-46a0-893f-f6b4869399af)
 
 
