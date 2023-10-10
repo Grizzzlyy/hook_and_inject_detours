@@ -39,6 +39,9 @@ HANDLE(WINAPI* pCreateFileW)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dw
     DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile) = CreateFileW;
 HANDLE WINAPI MyCreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes,
     DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile);
+BOOL(WINAPI* pCloseHandle)(HANDLE hObject) = CloseHandle;
+BOOL WINAPI MyCloseHandle(HANDLE hObject);
+
 
 // Returns pointer to allocated wstr with content of non_wide_str
 wchar_t* regular_to_wide_str(char* non_wide_str);
@@ -57,6 +60,8 @@ void close_connection();
 // path to file to hide
 char hide_file_path[DEFAULT_BUFLEN] = { 0 };
 wchar_t* hide_file_path_w;
+
+SYSTEMTIME last_msg_time;
 
 // parameters
 char param[DEFAULT_BUFLEN] = { 0 };
@@ -263,13 +268,42 @@ void send_func_call_log(const char* func_name)
 {
     CHAR send_msg[DEFAULT_BUFLEN] = { 0 };
     SYSTEMTIME st;
+
     GetLocalTime(&st);
     sprintf_s(send_msg, "%d-%02d-%02d %02d:%02d:%02d:%03d : %s()\n\0", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, func_name);
-    int iSendResult = send(ClientSocket, send_msg, strlen(send_msg) + 1, 0);
-    if (iSendResult == SOCKET_ERROR) {
-        DBGPRINT(L"send() failed with error: %d\n", WSAGetLastError());
-        closesocket(ClientSocket);
-        WSACleanup();
+    // if last message was send at the same second
+    if (last_msg_time.wYear == st.wYear && last_msg_time.wMonth == st.wMonth && last_msg_time.wDay == st.wDay &&
+        last_msg_time.wHour == st.wHour && last_msg_time.wMinute == st.wMinute && last_msg_time.wSecond == st.wSecond)
+    {
+        // cooldown is 400 milliseconds
+        if ((st.wMilliseconds - last_msg_time.wMilliseconds) > 200)
+        {
+            int iSendResult = send(ClientSocket, send_msg, strlen(send_msg) + 1, 0);
+            if (iSendResult == SOCKET_ERROR) {
+                DBGPRINT(L"send() failed with error: %d\n", WSAGetLastError());
+                closesocket(ClientSocket);
+                WSACleanup();
+            }
+            // save time of last message
+            memcpy(&last_msg_time, &st, sizeof(SYSTEMTIME));
+            return;
+        }
+        else // message doesn't satisfy cooldown
+        {
+            return;
+        }
+    }
+    else // last message sent more then 1 second ago
+    {
+        int iSendResult = send(ClientSocket, send_msg, strlen(send_msg) + 1, 0);
+        if (iSendResult == SOCKET_ERROR) {
+            DBGPRINT(L"send() failed with error: %d\n", WSAGetLastError());
+            closesocket(ClientSocket);
+            WSACleanup();
+        }
+        // save time of last message
+        memcpy(&last_msg_time, &st, sizeof(SYSTEMTIME));
+        return;
     }
 }
 
@@ -281,14 +315,14 @@ int DetourFunction(const char* func_name)
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindFirstFileA, MyFindFirstFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindFirstFileA() detoured successfully");
+            DBGPRINT(L"FindFirstFileA() detour success");
         else
             DBGPRINT(L"FindFirstFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindFirstFileW, MyFindFirstFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindFirstFileW() detoured successfully");
+            DBGPRINT(L"FindFirstFileW() detour success");
         else
             DBGPRINT(L"FindFirstFileW() detour fail");
         return 0;
@@ -299,14 +333,14 @@ int DetourFunction(const char* func_name)
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindNextFileA, MyFindNextFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindNextFileA() detoured successfully");
+            DBGPRINT(L"FindNextFileA() detour success");
         else
             DBGPRINT(L"FindNextFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindNextFileW, MyFindNextFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindNextFileW() detoured successfully");
+            DBGPRINT(L"FindNextFileW() detour success");
         else
             DBGPRINT(L"FindNextFileW() detour fail");
         return 0;
@@ -317,16 +351,27 @@ int DetourFunction(const char* func_name)
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pCreateFileA, MyCreateFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"MyCreateFileA() detoured successfully");
+            DBGPRINT(L"MyCreateFileA() detour success");
         else
             DBGPRINT(L"MyCreateFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pCreateFileW, MyCreateFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"MyCreateFileW() detoured successfully");
+            DBGPRINT(L"MyCreateFileW() detour success");
         else
             DBGPRINT(L"MyCreateFileW() detour fail");
+        return 0;
+    }
+    else if (strncmp(func_name, "CloseHandle", 11) == 0)
+    {
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)pCloseHandle, MyCloseHandle);
+        if (DetourTransactionCommit() == NO_ERROR)
+            DBGPRINT(L"MyCloseHandle() detour success");
+        else
+            DBGPRINT(L"MyCloseHandle() detour fail");
         return 0;
     }
     else if (strncmp(func_name, "hide", 4) == 0) // detour all funcs
@@ -335,44 +380,51 @@ int DetourFunction(const char* func_name)
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindFirstFileA, MyFindFirstFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindFirstFileA() detoured successfully");
+            DBGPRINT(L"FindFirstFileA() detour success");
         else
             DBGPRINT(L"FindFirstFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindFirstFileW, MyFindFirstFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindFirstFileW() detoured successfully");
+            DBGPRINT(L"FindFirstFileW() detour success");
         else
             DBGPRINT(L"FindFirstFileW() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindNextFileA, MyFindNextFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindNextFileA() detoured successfully");
+            DBGPRINT(L"FindNextFileA() detour success");
         else
             DBGPRINT(L"FindNextFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pFindNextFileW, MyFindNextFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"FindNextFileW() detoured successfully");
+            DBGPRINT(L"FindNextFileW() detour success");
         else
             DBGPRINT(L"FindNextFileW() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pCreateFileA, MyCreateFileA);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"MyCreateFileA() detoured successfully");
+            DBGPRINT(L"MyCreateFileA() detour success");
         else
             DBGPRINT(L"MyCreateFileA() detour fail");
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
         DetourAttach(&(PVOID&)pCreateFileW, MyCreateFileW);
         if (DetourTransactionCommit() == NO_ERROR)
-            DBGPRINT(L"MyCreateFileW() detoured successfully");
+            DBGPRINT(L"MyCreateFileW() detour success");
         else
             DBGPRINT(L"MyCreateFileW() detour fail");
+        DetourTransactionBegin();
+        DetourUpdateThread(GetCurrentThread());
+        DetourAttach(&(PVOID&)pCloseHandle, MyCloseHandle);
+        if (DetourTransactionCommit() == NO_ERROR)
+            DBGPRINT(L"MyCloseHandle() detour success");
+        else
+            DBGPRINT(L"MyCloseHandle() detour fail");
         return 0;
     }
     else
@@ -435,6 +487,14 @@ HANDLE WINAPI MyCreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwS
         return INVALID_HANDLE_VALUE;
     return pCreateFileW(lpFileName, dwDesiredAccess, dwShareMode, lpSecurityAttributes,
         dwCreationDisposition, dwFlagsAndAttributes, hTemplateFile);
+}
+
+BOOL WINAPI MyCloseHandle(HANDLE hObject)
+{
+    // for some reason DBGPRINT here crashes target app, maybe because debug messages sent too fast
+    //DBGPRINT(L"In MyCloseHandle");
+    send_func_call_log("CloseHandle");
+    return pCloseHandle(hObject);
 }
 
 VOID _DBGPRINT(LPCWSTR kwszFunction, INT iLineNumber, LPCWSTR kwszDebugFormatString, ...)
